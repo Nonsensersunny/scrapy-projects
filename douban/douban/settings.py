@@ -90,7 +90,13 @@ ITEM_PIPELINES = {
 #HTTPCACHE_IGNORE_HTTP_CODES = []
 #HTTPCACHE_STORAGE = 'scrapy.extensions.httpcache.FilesystemCacheStorage'
 
+# MongoDB的相关配置信息
 mongo_host = '127.0.0.1'
 mongo_port = 27017
 mongo_db_name = 'douban'
 mongo_db_collection = 'douban_movie'
+
+# 图像识别应用的相关配置
+APP_ID = '10824174'
+API_KEY = 'SoNAdcXichMTIXOmp86UyLv4 '
+SECRET_KEY = '8qITasFVwNZ3ouProDbZfBePHC6nLi3j'

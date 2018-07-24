@@ -1,2 +1,5 @@
 scrapy
 pymongo
+baidu-aip
+pillow
+requests
