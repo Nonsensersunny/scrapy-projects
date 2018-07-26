@@ -28,6 +28,7 @@ class DoubanSpiderSpider(scrapy.Spider):
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.221 Safari/537.36 SE 2.X MetaSr 1.0"}
 
+        
     # 请求入口
     def start_requests(self):
         return [scrapy.FormRequest("https://accounts.douban.com/login", headers=DoubanSpiderSpider.headers,
@@ -102,24 +103,63 @@ class DoubanSpiderSpider(scrapy.Spider):
     def get_file_content(self, filePath):
         with open(filePath, 'rb') as f:
             return f.read()
+    
 
     # 解析请求到的数据，得到进行持久化存储的数据和进一步爬取数据的请求
     def parse(self, response):
-        # 一级电影条目
-        movie_list = response.xpath("//div[@class='article']//ol[@class='grid_view']/li")
-        for item in movie_list:
-            douban_item = DoubanItem()
-            douban_item['serial_number'] = item.xpath(".//div[@class='item']//em/text()").extract_first()
-            douban_item['movie_name'] = item.xpath(".//div[@class='info']//span[@class='title']/text()").extract_first()
-            douban_item['introduce'] = "".join(item.xpath(".//div[@class='info']//div[@class='bd']/p/text()").extract_first().split())
-            douban_item['star'] = item.xpath(".//div[@class='info']//div[@class='bd']//div[@class='star']/span[@class='rating_num']/text()").extract_first()
-            douban_item['evaluate'] = item.xpath(".//div[@class='info']//div[@class='bd']//div[@class='star']/span[last()]/text()").extract_first()
-            douban_item['describe'] = item.xpath(".//div[@class='info']//div[@class='bd']//p[@class='quote']/span[@class='inq']/text()").extract_first()
-            # 将电影条目输送至pipeline进行清洗
-            yield douban_item
-        # 获取下一页的链接
+        # # 一级电影条目
+        # movie_list = response.xpath("//div[@class='article']//ol[@class='grid_view']/li")
+        # for item in movie_list:
+        #     douban_item = DoubanItem()
+        #     douban_item['serial_number'] = item.xpath(".//div[@class='item']//em/text()").extract_first()
+        #     douban_item['movie_name'] = item.xpath(".//div[@class='info']//span[@class='title']/text()").extract_first()
+        #     douban_item['introduce'] = "".join(item.xpath(".//div[@class='info']//div[@class='bd']/p/text()").extract_first().split())
+        #     douban_item['star'] = item.xpath(".//div[@class='info']//div[@class='bd']//div[@class='star']/span[@class='rating_num']/text()").extract_first()
+        #     douban_item['evaluate'] = item.xpath(".//div[@class='info']//div[@class='bd']//div[@class='star']/span[last()]/text()").extract_first()
+        #     douban_item['describe'] = item.xpath(".//div[@class='info']//div[@class='bd']//p[@class='quote']/span[@class='inq']/text()").extract_first()
+        #     comments = []
+            
+        #     # 将电影条目输送至pipeline进行清洗
+        #     yield douban_item
+        # # 获取下一页的链接
+        # next_link = response.xpath("//div[@class='paginator']//span[@class='next']/link/@href").extract()
+        # if next_link:
+        #     next_link = next_link[0]
+        #     # 将下一页的链接进行递归解析直至所有的页面的链接被遍历
+        #     yield scrapy.Request("https://movie.douban.com/top250" + next_link, callback=self.parse)
+        detail_urls = response.xpath("//div[@class='article']//ol[@class='grid_view']//div[@class='item']/div[@class='pic']/a/@href").extract()
+        movie_desc = response.xpath("//div[@class='article']//ol[@class='grid_view']/li//div[@class='bd']/p/text()").extract()
+        package = zip(detail_urls, movie_desc)
+        for url, desc in package:
+            yield scrapy.Request(url, callback=self.parse_url, meta={ "movie_intro": desc })
+
         next_link = response.xpath("//div[@class='paginator']//span[@class='next']/link/@href").extract()
         if next_link:
             next_link = next_link[0]
             # 将下一页的链接进行递归解析直至所有的页面的链接被遍历
             yield scrapy.Request("https://movie.douban.com/top250" + next_link, callback=self.parse)
+
+
+
+    def parse_url(self, response):
+        douban_item = DoubanItem()
+        douban_item['number'] = response.xpath('//*[@id="content"]/div[1]/span[1]/text()').extract_first()
+        douban_item['name'] = response.xpath('//*[@id="content"]/h1/span[1]/text()').extract_first()
+        douban_item['year'] = int(response.xpath('//*[@id="content"]/h1/span[2]/text()').extract_first()[1:5])
+        douban_item['director'] = response.xpath('//*[@id="info"]/span[1]/span[2]/a/text()').extract_first()
+        # douban_item['country'] = response.xpath('//*[@id="info"]/span[1]/span[2]/a/text()').extract_first()
+        # douban_item['language'] = response.xpath('//*[@id="info"]/span[1]/span[2]/a/text()').extract_first()
+        douban_item['introduce'] = "".join(response.meta['movie_intro'].split())
+        douban_item['star'] = float(response.xpath('//*[@id="interest_sectl"]/div[1]/div[2]/strong/text()').extract_first())
+        douban_item['evaluate'] = int(response.xpath('//*[@id="interest_sectl"]/div[1]/div[2]/div/div[2]/a/span/text()').extract_first())
+        douban_item['describe'] = "".join(response.xpath('//div[@id="link-report"]//span[@property="v:summary"]/text()').extract_first().split())
+        
+        comments = dict()
+        comment_items = response.xpath('//div[@class="comment-item"]/div[@class="comment"]')
+        for item in comment_items:
+            username = item.xpath('.//span[@class="comment-info"]/a/text()').extract_first()
+            comment = item.xpath('.//span[@class="short"]/text()').extract_first()
+            comments[username] = comment
+
+        douban_item['comments'] = comment
+        yield douban_item
